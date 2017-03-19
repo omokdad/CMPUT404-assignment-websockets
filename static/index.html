@@ -43,6 +43,35 @@ function debug(str) {
 }
 debug("Test");
 
+// AJAX function from Assignment 4 to get the full world as a request at the start.
+function sendJSONXMLHTTPRequest(url, callback) {
+    var xhr = new XMLHttpRequest();
+
+    xhr.open('GET', url);
+
+    xhr.onreadystatechange = function () {
+        if (xhr.readyState==4) {
+            try {
+                if (xhr.status==200) {
+                    // parse some JSON from the request!
+                    // Pass the data to the callback!
+                    callback(JSON.parse(xhr.responseText));
+                }
+            }
+            catch(e) {
+                alert('Error: ' + e.name);
+            }
+        }
+    };
+
+    // set universal header
+    xhr.setRequestHeader("Accept", "application/json");
+
+    xhr.send(null);
+
+}
+
+
 // function to generate random id for each client so they can each have 100 strokes and not delete each other.
 // Also each Client can have a different colored stroke because ID is a 3 digit hex
 // written by csharptest.net (http://stackoverflow.com/users/164392/csharptest-net)
@@ -60,6 +89,8 @@ function makeid()
 
 
 world = {};
+
+clientId = makeid();
 
 //Its Pretty!
 function drawCircle(context,entity) {
@@ -140,9 +171,14 @@ function getPosition(e) {
 
 function addEntity(entity, data) {
     world[entity] = data;
-    drawNextFrame(); // (but should we?)
+    drawNextFrame(); // (but should we?) (not really, rendering always)
     //XXX: Send a XHTML Request that updates the entity you just modified!
+    var sendDict = {};
+    sendDict[entity] = data;
+    var jsonEntity = JSON.stringify(sendDict);
+    socket.send(jsonEntity);
 }
+
 var counter = 0;
 function addEntityWithoutName(data) {
     var name = clientId+(counter++)%100;
@@ -216,7 +252,7 @@ mouse = (function() {
             e.preventDefault();
             if (self.wasClicked(e)) {
                 var pos = getPosition(e);
-                var x = pos[0];
+                var x = pos[0];    
                 var y = pos[1];
 	        if (self.clicked != 0) {
 	            //self.squeakin(x,y);
@@ -263,7 +299,7 @@ mouse.mousedraggers.push(function(x,y,clicked,e) {
 
 
 function update() {
-    drawFrame();
+    renderFrame();
 }
 
 
@@ -272,13 +308,23 @@ function wsSetup() {
     socket = new WebSocket(url);
     socket.onopen = function() {
         //XXX: TODO What are you going to do here?
+        // Get the whole world
+        //Get the world from the webservice using a XMLHTTPRequest
+        sendJSONXMLHTTPRequest('/world', function(newWorld){
+            world = newWorld;       // Update the world!
+        });
+
+        renderFrame();            // Draw it out
     };
     socket.onerror = function(msg) {
         debug("WebSocket Error:" + msg.data);
     };
     socket.onmessage = function(msg) {
         try {
-            debug("WebSocket Recv:" + msg.data);
+            var entity = JSON.parse(msg.data);
+            for (var key in entity) {
+                world[key] = entity[key];
+            }
             //XXX: TODO What are you going to do here?
         } catch (e) {
             alert("socket on message: " + e);

@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 import flask
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect
 from flask_sockets import Sockets
 import gevent
 from gevent import queue
@@ -26,6 +26,18 @@ app = Flask(__name__)
 sockets = Sockets(app)
 app.debug = True
 
+# https://github.com/abramhindle/WebSocketsExamples/blob/master/broadcaster.py
+# By: Abram Hindle
+class Client:
+    def __init__(self):
+        self.queue = queue.Queue()
+
+    def put(self, v):
+        self.queue.put_nowait(v)
+
+    def get(self):
+        return self.queue.get()
+
 class World:
     def __init__(self):
         self.clear()
@@ -34,7 +46,7 @@ class World:
 
     def add_set_listener(self, listener):
         self.listeners.append( listener )
-
+        
     def update(self, entity, key, value):
         entry = self.space.get(entity,dict())
         entry[key] = value
@@ -65,35 +77,56 @@ clients = []
 
 def set_listener( entity, data ):
     ''' do something with the update ! '''
+    for client in clients:
+        client.put(json.dumps({entity: data}))
 
 myWorld.add_set_listener( set_listener )
 
 @app.route('/')
 def hello():
     '''Return something coherent here.. perhaps redirect to /static/index.html '''
-    return app.send_static_file('index.html')
+    return redirect('static/index.html')
 
+# https://github.com/abramhindle/WebSocketsExamples/blob/master/broadcaster.py
+# By: Abram Hindle
 def read_ws(ws,client):
     '''A greenlet function that reads from the websocket and updates the world'''
-    while not ws.closed:
-        message = ws.receive()
-        if message:
-            message = json.loads(message)
-            for key in message.keys():
-                myWorld.set(key, message[key])
-    return None
+    try:
+        while True:
+            msg = ws.receive()
+            print "WS RECV: %s" % msg
+            if (msg is not None):
+                packet = json.loads(msg)
+                for entity in packet:
+                    myWorld.set(entity, packet[entity])
+            else:
+                break
+    except:
+        '''Done'''
 
+
+# https://github.com/abramhindle/WebSocketsExamples/blob/master/broadcaster.py
+# By: Abram Hindle
 @sockets.route('/subscribe')
 def subscribe_socket(ws):
     '''Fufill the websocket URL of /subscribe, every update notify the
        websocket and read updates from the websocket '''
     # XXX: TODO IMPLEMENT ME
-
-    clients.append(ws)
-    listenerThread = gevent.spawn(read_ws, ws)
-    listnerThread.join()
-    
-    return None
+    client = Client()
+    clients.append(client)
+    g = gevent.spawn( read_ws, ws, client )    
+    print "Subscribing"
+    try:
+        while True:
+            # block here
+            msg = client.get()
+            print "Got a message!"
+            ws.send(msg)
+    except Exception as e:# WebSocketError as e:
+        print "WS Error %s" % e
+    finally:
+        clients.remove(client)
+        gevent.kill(g)
 
 
 def flask_post_json():
@@ -111,7 +144,7 @@ def update(entity):
     '''update the entities via this interface'''
     jsonReq = flask_post_json()             # get the body of the request as json
     myWorld.set(entity, jsonReq)            # update the entity with its new values (or new entity)
-	return jsonify(myWorld.get(entity))     # send back the entity as json to confirm
+    return jsonify(myWorld.get(entity))     # send back the entity as json to confirm
 
 @app.route("/world", methods=['POST','GET'])
 def world():
@@ -128,7 +161,7 @@ def get_entity(entity):
 def clear():
     '''Clear the world out!'''
     myWorld.clear()
-	return "{}"                             # return "{}" since the world is empty to save computation
+    return "{}"                             # return "{}" since the world is empty to save computation
 
 
 
