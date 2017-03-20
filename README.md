@@ -57,3 +57,15 @@ Contributors
 
 * Mark Galloway
 * Abram Hindle
+* Omar Almokdad
+
+Code Snippets From
+==================
+
+Some Websockets code written by Abram Hindle in
+* https://github.com/abramhindle/WebSocketsExamples/blob/master/broadcaster.py
+
+
+Code to randomize ID in index.html written by
+* csharptest.net (http://stackoverflow.com/users/164392/csharptest-net)
+*   on StackOverflow (http://stackoverflow.com/questions/1349404/generate-random-string-characters-in-javascript)
